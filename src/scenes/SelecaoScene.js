@@ -10,6 +10,7 @@ class SelecaoScene extends Phaser.Scene {
 
     create() {
         criarBotaoTelaCheia(this);
+        MusicaFundo.tocar(this);
 
         // mesmo fundo de terra do jogo, recortado quadrado e escurecido — dá contexto
         // sem competir com a grade de bolinhas

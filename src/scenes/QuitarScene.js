@@ -10,6 +10,7 @@ class QuitarScene extends Phaser.Scene {
 
     create() {
         criarBotaoTelaCheia(this);
+        MusicaFundo.parar(this);
 
         this.CAMPO = { x1: 270, y1: 34, x2: 690, y2: 454 };
         this.CENTRO_TRIANGULO = { x: 480, y: 244 };

@@ -10,10 +10,13 @@ class MenuScene extends Phaser.Scene {
     preload() {
         Carregando.acompanhar(this, 'Carregando...');
         this.load.image('fundoMenu', 'assets/images/menu_bg.webp');
+        this.load.audio('musicaFundo', 'assets/audio/musica.mp3');
     }
 
     create() {
         criarBotaoTelaCheia(this);
+
+        MusicaFundo.tocar(this);
 
         // fundo cobrindo o canvas inteiro (960x540) mantendo a proporção original da
         // imagem — sobra de altura fica cortada pela própria câmera, sem distorcer nada
@@ -62,6 +65,7 @@ class MenuScene extends Phaser.Scene {
 
     abrirOpcoes() {
         JogoState.somAtivo = !JogoState.somAtivo;
+        if (MusicaFundo.instancia) MusicaFundo.instancia.setMute(JogoState.somAtivo === false);
         this.mostrarToast(JogoState.somAtivo ? '🔊 Som ligado' : '🔇 Som desligado');
     }
 

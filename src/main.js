@@ -106,7 +106,32 @@ const SomFX = {
     }
 };
 
-// ---------- Geometria do triângulo do Quitar ----------
+// ---------- Música de fundo (menu → seleção, para quando o Quitar começa) ----------
+const MusicaFundo = {
+    instancia: null,
+
+    tocar(scene) {
+        if (!this.instancia) {
+            this.instancia = scene.sound.add('musicaFundo', { loop: true, volume: 0.45 });
+        }
+        if (JogoState.somAtivo === false) return;
+        if (!this.instancia.isPlaying) this.instancia.play();
+    },
+
+    // fade out suave usando o tween manager da cena que está chamando (não precisa ser
+    // a mesma cena que tocou a música — o Phaser tuenda qualquer objeto com props numéricas)
+    parar(scene, duracaoMs = 700) {
+        if (!this.instancia || !this.instancia.isPlaying) return;
+        scene.tweens.add({
+            targets: this.instancia,
+            volume: 0,
+            duration: duracaoMs,
+            onComplete: () => { if (this.instancia) this.instancia.stop(); }
+        });
+    }
+};
+
+
 function sinalPonto(p1, p2, p3) {
     return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
 }
@@ -202,7 +227,7 @@ const config = {
         autoCenter: Phaser.Scale.CENTER_BOTH,
         fullscreenTarget: document.documentElement
     },
-    scene: [MenuScene, SelecaoScene, QuitarScene]
+    scene: [ProdutoraScene, MenuScene, SelecaoScene, QuitarScene]
 };
 
 function iniciarJogo() {
