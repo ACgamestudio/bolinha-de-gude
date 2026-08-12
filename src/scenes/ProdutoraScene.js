@@ -98,7 +98,7 @@ class ProdutoraScene extends Phaser.Scene {
 
     // botão "INICIAR" = uma bolinha de gude girando, com o texto fixo por cima
     mostrarBotaoIniciar() {
-        const tipo = TIPOS_DE_BOLINHA.find(t => t.nome === JogoState.tipoEscolhido) || TIPOS_DE_BOLINHA[0];
+        const tipo = TIPOS_DE_BOLINHA.find(t => t.nome === 'Furacão Verde') || TIPOS_DE_BOLINHA[0];
         const chave = criarTexturaBolinha(this, tipo);
 
         const bolinha = this.add.image(0, 0, chave).setScale(3.4);
@@ -156,6 +156,14 @@ class ProdutoraScene extends Phaser.Scene {
         SomFX.iniciar();
         SomFX.atirar();
 
+        // destrava o gerenciador de som do próprio Phaser nesse mesmo clique — é um
+        // contexto de áudio separado do SomFX (que é Web Audio puro), e a música de
+        // fundo depende dele especificamente
+        if (this.sound && this.sound.context && this.sound.context.state === 'suspended') {
+            this.sound.context.resume();
+        }
+        if (this.sound && this.sound.unlock) this.sound.unlock();
+
         this.tweens.add({ targets: bolinha, angle: bolinha.angle + 720, duration: 320, ease: 'cubic.out' });
         this.tweens.add({
             targets: botao,
@@ -180,6 +188,7 @@ class ProdutoraScene extends Phaser.Scene {
         this.videoProdutora.setVisible(false);
         this.videoAbertura.setVisible(true);
         this.videoAbertura.setMute(false);
+        this.videoAbertura.setVolume(0.55);
         this.videoAbertura.play(false);
 
         MusicaFundo.tocar(this);

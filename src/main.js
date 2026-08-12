@@ -112,10 +112,11 @@ const MusicaFundo = {
 
     tocar(scene) {
         if (!this.instancia) {
-            this.instancia = scene.sound.add('musicaFundo', { loop: true, volume: 0.45 });
+            this.instancia = scene.sound.add('musicaFundo', { loop: true, volume: 0.75 });
         }
         if (JogoState.somAtivo === false) return;
         if (!this.instancia.isPlaying) this.instancia.play();
+        else this.instancia.setVolume(0.75); // garante volume alto mesmo se algo tinha baixado antes
     },
 
     // fade out suave usando o tween manager da cena que está chamando (não precisa ser
