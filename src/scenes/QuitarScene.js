@@ -12,12 +12,13 @@ class QuitarScene extends Phaser.Scene {
         criarBotaoTelaCheia(this);
         MusicaFundo.parar(this);
 
-        this.CAMPO = { x1: 270, y1: 34, x2: 690, y2: 454 };
-        this.CENTRO_TRIANGULO = { x: 480, y: 244 };
-        this.LADO_TRIANGULO = 112;
-        this.RAIO_PROIBIDO_POSICIONAMENTO = 86;
+        this.CAMPO = { x1: 40, y1: 30, x2: 920, y2: 486 };
+        this.CENTRO_TRIANGULO = { x: 480, y: 250 };
+        this.LADO_TRIANGULO = 120;
+        this.RAIO_PROIBIDO_POSICIONAMENTO = 92;
         this.VELOCIDADE_MIN_TIRO = 160;
-        this.VELOCIDADE_MAX_TIRO = 760;
+        this.VELOCIDADE_MAX_TIRO = 1050;
+        this.PUXAO_MAXIMO = 200;        // px de arrasto = força máxima do estilingue
 
         this.pontosJogador = 0;
         this.pontosBot = 0;
@@ -25,6 +26,7 @@ class QuitarScene extends Phaser.Scene {
         this.fase = null;
         this.anguloAtual = 225; // mirando de baixo-esquerda pro centro por padrão
         this.forcaAtual = 55;
+        this.jogadorJaPosicionou = false;
 
         this.criarCenario();
         this.criarBolinhasDoTriangulo();
@@ -39,6 +41,7 @@ class QuitarScene extends Phaser.Scene {
 
     // ---------- Cenário ----------
     criarCenario() {
+        this.rastroGfx = this.add.graphics().setDepth(4);
         this.add.image(480, 270, 'fundoQuintalJogo')
             .setCrop(181, 0, 1086, 1086)
             .setDisplaySize(960, 960); // recorte quadrado + tamanho quadrado = sem distorção; sobra é cortada pela câmera
@@ -117,26 +120,26 @@ class QuitarScene extends Phaser.Scene {
         }).setOrigin(0.5);
 
         const painel = (x, tipo, cor) => {
-            const c = this.add.container(x, 130);
+            const c = this.add.container(x, 92).setDepth(30);
             const fundo = this.add.graphics();
             fundo.fillStyle(0x1a0f06, 0.75);
-            fundo.fillRoundedRect(-70, -55, 140, 110, 10);
+            fundo.fillRoundedRect(-60, -46, 120, 92, 10);
             fundo.lineStyle(2, cor, 0.9);
-            fundo.strokeRoundedRect(-70, -55, 140, 110, 10);
+            fundo.strokeRoundedRect(-60, -46, 120, 92, 10);
             const chave = criarTexturaBolinha(this, tipo);
-            const prev = this.add.image(0, -20, chave).setDisplaySize(44, 44);
-            const nome = this.add.text(0, 8, tipo.nome, {
-                fontSize: '11px', fontFamily: 'Fredoka, Arial, sans-serif', color: '#ffe8c8', align: 'center', wordWrap: { width: 130 }
+            const prev = this.add.image(0, -18, chave).setDisplaySize(38, 38);
+            const nome = this.add.text(0, 6, tipo.nome, {
+                fontSize: '10px', fontFamily: 'Fredoka, Arial, sans-serif', color: '#ffe8c8', align: 'center', wordWrap: { width: 112 }
             }).setOrigin(0.5);
-            const placar = this.add.text(0, 32, '0', {
-                fontSize: '24px', fontFamily: 'Fredoka, Arial, sans-serif', fontStyle: '700', color: '#ffffff'
+            const placar = this.add.text(0, 28, '0', {
+                fontSize: '22px', fontFamily: 'Fredoka, Arial, sans-serif', fontStyle: '700', color: '#ffffff'
             }).setOrigin(0.5);
             c.add([fundo, prev, nome, placar]);
             return placar;
         };
 
-        this.placarJogadorTxt = painel(135, this.bolinhaJogador.tipo, 0x2ecc71);
-        this.placarBotTxt = painel(825, this.bolinhaBot.tipo, 0xe74c3c);
+        this.placarJogadorTxt = painel(105, this.bolinhaJogador.tipo, 0x2ecc71);
+        this.placarBotTxt = painel(855, this.bolinhaBot.tipo, 0xe74c3c);
 
         this.textoRestantes = this.add.text(480, 470, '', {
             fontSize: '13px',
@@ -154,7 +157,7 @@ class QuitarScene extends Phaser.Scene {
 
     // ---------- UI de posicionamento ----------
     criarUiPosicionamento() {
-        this.dicaPosicionar = this.add.text(480, 500, 'Arraste sua bolinha até o lugar', {
+        this.dicaPosicionar = this.add.text(480, 512, 'Arraste sua bolinha até o lugar de saída', {
             fontSize: '14px', fontFamily: 'Fredoka, Arial, sans-serif', fontStyle: '600', color: '#ffffff',
             backgroundColor: '#000000aa', padding: { x: 10, y: 4 }
         }).setOrigin(0.5).setDepth(20);
@@ -173,9 +176,11 @@ class QuitarScene extends Phaser.Scene {
         this.input.setDraggable(this.bolinhaJogador.sprite);
 
         this.bolinhaJogador.sprite.on('drag', (pointer, dragX, dragY) => {
+            if (this.fase !== 'posicionando') return;
             this.bolinhaJogador.sprite.setPosition(dragX, dragY);
         });
         this.bolinhaJogador.sprite.on('dragend', () => {
+            if (this.fase !== 'posicionando') return;
             const pos = this.ajustarPosicaoValida(this.bolinhaJogador.sprite.x, this.bolinhaJogador.sprite.y, this.bolinhaJogador);
             this.bolinhaJogador.x = pos.x;
             this.bolinhaJogador.y = pos.y;
@@ -224,121 +229,107 @@ class QuitarScene extends Phaser.Scene {
         return [...this.bolinhasAlvo, this.bolinhaJogador, this.bolinhaBot];
     }
 
-    // ---------- UI de mira (ângulo + força por botões) ----------
+    // ---------- Estilingue: arrasta a bolinha pra trás e solta ----------
     criarUiMira() {
-        this.setaMira = this.add.graphics().setDepth(15);
+        this.guiaEstilingue = this.add.graphics().setDepth(15);
+        this.puxando = false;
+        this.puxaoDX = 0;
+        this.puxaoDY = 0;
 
-        const y = 500;
-        const passo = (delta) => () => {
-            this.anguloAtual = Phaser.Math.Wrap(this.anguloAtual + delta, 0, 360);
-            this.desenharSetaMira();
-        };
-
-        this.botaoAnguloMenos = this.criarBotaoRedondo(340, y, '◀', passo(-5));
-        this.textoAngulo = this.add.text(390, y, '0°', {
-            fontSize: '15px', fontFamily: 'Fredoka, Arial, sans-serif', fontStyle: '700', color: '#ffffff'
-        }).setOrigin(0.5).setDepth(20);
-        this.botaoAnguloMais = this.criarBotaoRedondo(440, y, '▶', passo(5));
-
-        this.labelAngulo = this.add.text(390, y - 22, 'ÂNGULO', {
-            fontSize: '11px', fontFamily: 'Fredoka, Arial, sans-serif', color: '#ffe8c8'
-        }).setOrigin(0.5).setDepth(20);
-
-        this.barraForcaFundo = this.add.graphics().setDepth(20);
-        this.barraForcaPreenchimento = this.add.graphics().setDepth(20);
-        this.textoForca = this.add.text(650, y - 22, 'FORÇA', {
-            fontSize: '11px', fontFamily: 'Fredoka, Arial, sans-serif', color: '#ffe8c8'
-        }).setOrigin(0.5).setDepth(20);
-
-        this.botaoForcaMenos = this.criarBotaoRedondo(578, y, '−', () => this.ajustarForca(-10));
-        this.botaoForcaMais = this.criarBotaoRedondo(722, y, '+', () => this.ajustarForca(10));
-
-        this.botaoAtirar = criarBotaoEstilizado(this, 850, y, 150, 40, '🎯 ATIRAR!', 0xc0392b, 0x6e1c11, '#ffffff', () => {
-            this.atirar('jogador');
+        // handlers de arrasto no sprite da própria bolinha do jogador
+        const sp = this.bolinhaJogador.sprite;
+        sp.on('dragstart', () => {
+            if (this.fase !== 'mirando' || this.jogadorDaVez !== 'jogador') return;
+            this.puxando = true;
         });
-        this.botaoAtirar.setDepth(20);
-
-        this.gruposMiraElementos = [
-            this.botaoAnguloMenos, this.botaoAnguloMais, this.textoAngulo,
-            this.botaoForcaMenos, this.botaoForcaMais, this.botaoAtirar,
-            this.barraForcaFundo, this.barraForcaPreenchimento, this.textoForca,
-            this.labelAngulo
-        ];
-
-        this.desenharBarraForca();
-        this.desenharSetaMira();
+        sp.on('drag', (pointer, dragX, dragY) => {
+            if (!this.puxando) return;
+            // vetor do centro da bolinha até o dedo (o "puxão"); a bolinha NÃO se move
+            let dx = dragX - this.bolinhaJogador.x;
+            let dy = dragY - this.bolinhaJogador.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > this.PUXAO_MAXIMO) {
+                dx = dx / dist * this.PUXAO_MAXIMO;
+                dy = dy / dist * this.PUXAO_MAXIMO;
+            }
+            this.puxaoDX = dx;
+            this.puxaoDY = dy;
+            // mantém o sprite fixo no lugar da bolinha (só o guia se move)
+            sp.setPosition(this.bolinhaJogador.x, this.bolinhaJogador.y);
+            this.desenharGuiaEstilingue();
+        });
+        sp.on('dragend', () => {
+            if (!this.puxando) return;
+            this.puxando = false;
+            const dist = Math.hypot(this.puxaoDX, this.puxaoDY);
+            this.guiaEstilingue.clear();
+            if (dist < 12) { this.desenharGuiaEstilingue(); return; } // puxão fraco demais: ignora
+            // dispara na direção OPOSTA ao puxão (estilingue)
+            const forca = Phaser.Math.Clamp(dist / this.PUXAO_MAXIMO, 0, 1) * 100;
+            const angulo = Phaser.Math.RadToDeg(Math.atan2(-this.puxaoDY, -this.puxaoDX));
+            this.puxaoDX = this.puxaoDY = 0;
+            this.atirar('jogador', angulo, forca);
+        });
     }
 
-    criarBotaoRedondo(x, y, label, aoClicar) {
-        const g = this.add.graphics();
-        g.fillStyle(0x3e2412, 0.9);
-        g.fillCircle(0, 0, 17);
-        g.lineStyle(2, 0x1c0f06, 1);
-        g.strokeCircle(0, 0, 17);
-        const txt = this.add.text(0, 0, label, {
-            fontSize: '16px', fontFamily: 'Arial', fontStyle: 'bold', color: '#ffe8c8'
-        }).setOrigin(0.5);
-        const botao = this.add.container(x, y, [g, txt]).setDepth(20);
-        botao.setSize(34, 34);
-        botao.setInteractive({ useHandCursor: true });
-        botao.on('pointerover', () => this.tweens.add({ targets: botao, scale: 1.1, duration: 80 }));
-        botao.on('pointerout', () => this.tweens.add({ targets: botao, scale: 1, duration: 80 }));
-        botao.on('pointerup', aoClicar);
-        return botao;
-    }
-
-    ajustarForca(delta) {
-        this.forcaAtual = Phaser.Math.Clamp(this.forcaAtual + delta, 10, 100);
-        this.desenharBarraForca();
-    }
-
-    desenharBarraForca() {
-        const x = 600, y = 500, largura = 110, altura = 16;
-        this.barraForcaFundo.clear();
-        this.barraForcaFundo.fillStyle(0x1a0f06, 0.85);
-        this.barraForcaFundo.fillRoundedRect(x, y - altura / 2, largura, altura, 6);
-        this.barraForcaFundo.lineStyle(2, 0xf0d9a8, 0.6);
-        this.barraForcaFundo.strokeRoundedRect(x, y - altura / 2, largura, altura, 6);
-
-        this.barraForcaPreenchimento.clear();
-        const w = (largura - 4) * (this.forcaAtual / 100);
-        const cor = this.forcaAtual > 75 ? 0xe74c3c : (this.forcaAtual > 40 ? 0xf1c40f : 0x2ecc71);
-        this.barraForcaPreenchimento.fillStyle(cor, 1);
-        this.barraForcaPreenchimento.fillRoundedRect(x + 2, y - altura / 2 + 2, Math.max(2, w), altura - 4, 4);
-    }
-
-    desenharSetaMira() {
-        this.textoAngulo.setText(Math.round(this.anguloAtual) + '°');
-        this.setaMira.clear();
-        if (this.fase !== 'mirando' || !this.bolinhaJogador) return;
-        const rad = Phaser.Math.DegToRad(this.anguloAtual);
+    desenharGuiaEstilingue() {
+        const g = this.guiaEstilingue;
+        g.clear();
+        if (!this.puxando || !this.bolinhaJogador) return;
         const bx = this.bolinhaJogador.x, by = this.bolinhaJogador.y;
-        const comprimento = 34;
-        const ex = bx + Math.cos(rad) * comprimento;
-        const ey = by + Math.sin(rad) * comprimento;
-        this.setaMira.lineStyle(3, 0xffe066, 0.95);
-        this.setaMira.lineBetween(bx, by, ex, ey);
-        this.setaMira.fillStyle(0xffe066, 0.95);
-        this.setaMira.fillCircle(ex, ey, 4);
+        const dist = Math.hypot(this.puxaoDX, this.puxaoDY);
+        const t = Phaser.Math.Clamp(dist / this.PUXAO_MAXIMO, 0, 1);
+        // linha da faixa elástica (do dedo até a bolinha)
+        const cor = t > 0.75 ? 0xe74c3c : (t > 0.4 ? 0xf1c40f : 0x2ecc71);
+        g.lineStyle(4, cor, 0.9);
+        g.lineBetween(bx, by, bx + this.puxaoDX, by + this.puxaoDY);
+        // seta de trajetória (direção oposta), comprimento proporcional à força
+        const tx = bx - this.puxaoDX * 1.6, ty = by - this.puxaoDY * 1.6;
+        g.lineStyle(4, 0xffe066, 0.95);
+        g.lineBetween(bx, by, tx, ty);
+        g.fillStyle(0xffe066, 0.95);
+        g.fillCircle(tx, ty, 6);
+        // pontinhos tracejados na trajetória
+        g.fillStyle(0xffffff, 0.6);
+        for (let i = 1; i <= 4; i++) {
+            g.fillCircle(bx - this.puxaoDX * (0.4 * i), by - this.puxaoDY * (0.4 * i), 2.5);
+        }
     }
 
     mostrarUiMira(mostrar) {
-        this.gruposMiraElementos.forEach(el => el.setVisible(mostrar));
-        this.setaMira.setVisible(mostrar);
-        if (mostrar) this.desenharSetaMira(); else this.setaMira.clear();
+        if (!mostrar) { this.puxando = false; this.guiaEstilingue.clear(); }
+        // habilita/desabilita o arrasto de tiro da bolinha do jogador
+        if (this.bolinhaJogador) {
+            if (mostrar && this.jogadorDaVez === 'jogador') {
+                this.bolinhaJogador.sprite.setInteractive({ useHandCursor: true });
+                this.input.setDraggable(this.bolinhaJogador.sprite, true);
+            }
+        }
     }
+
 
     // ---------- Fluxo de turno ----------
     iniciarTurno() {
         this.textoStatus.setText(this.jogadorDaVez === 'jogador' ? 'SUA VEZ' : 'VEZ DO BOT');
-        this.fase = 'posicionando';
         this.mostrarUiMira(false);
 
         if (this.jogadorDaVez === 'jogador') {
-            this.dicaPosicionar.setVisible(true);
-            this.botaoConfirmarPosicao.setVisible(true);
             this.textoBotJogando.setVisible(false);
-            this.bolinhaJogador.sprite.setInteractive({ useHandCursor: true });
+            if (!this.jogadorJaPosicionou) {
+                // primeira jogada: escolhe onde colocar a bolinha
+                this.fase = 'posicionando';
+                this.dicaPosicionar.setVisible(true);
+                this.botaoConfirmarPosicao.setVisible(true);
+                this.bolinhaJogador.sprite.setInteractive({ useHandCursor: true });
+                this.jogadorJaPosicionou = true;
+            } else {
+                // demais jogadas: já vai direto pro estilingue, de onde a bolinha parou
+                this.dicaPosicionar.setVisible(false);
+                this.botaoConfirmarPosicao.setVisible(false);
+                this.fase = 'mirando';
+                this.mostrarUiMira(true);
+                this.textoStatus.setText('PUXE E SOLTE PRA ATIRAR');
+            }
         } else {
             this.dicaPosicionar.setVisible(false);
             this.botaoConfirmarPosicao.setVisible(false);
@@ -349,16 +340,12 @@ class QuitarScene extends Phaser.Scene {
 
     encerrarPosicionamento() {
         if (this.fase !== 'posicionando' || this.jogadorDaVez !== 'jogador') return;
-        this.bolinhaJogador.sprite.disableInteractive();
         this.dicaPosicionar.setVisible(false);
         this.botaoConfirmarPosicao.setVisible(false);
 
         this.fase = 'mirando';
-        const c = this.CENTRO_TRIANGULO;
-        this.anguloAtual = Phaser.Math.RadToDeg(Math.atan2(c.y - this.bolinhaJogador.y, c.x - this.bolinhaJogador.x));
-        this.forcaAtual = 55;
-        this.desenharBarraForca();
         this.mostrarUiMira(true);
+        this.textoStatus.setText('PUXE E SOLTE PRA ATIRAR');
     }
 
     jogadaDoBot() {
@@ -393,6 +380,24 @@ class QuitarScene extends Phaser.Scene {
         this.fase = 'simulando';
     }
 
+    // rastro suave atrás de cada bolinha em movimento — puramente visual
+    desenharRastros() {
+        const g = this.rastroGfx;
+        g.clear();
+        this.todasBolinhas().forEach(b => {
+            if (b.removida || !b.emJogo) return;
+            const vel = Math.hypot(b.vx, b.vy);
+            if (vel < 40) return;
+            const comprimento = Phaser.Math.Clamp(vel / 22, 6, 42);
+            const ux = b.vx / vel, uy = b.vy / vel;
+            const cor = (b.dono === 'jogador') ? 0xffe066 : (b.dono === 'bot' ? 0xff8c6b : 0xffffff);
+            g.fillStyle(cor, 0.16);
+            g.fillCircle(b.x - ux * comprimento * 0.7, b.y - uy * comprimento * 0.7, b.raio * 0.7);
+            g.fillStyle(cor, 0.28);
+            g.fillCircle(b.x - ux * comprimento * 0.35, b.y - uy * comprimento * 0.35, b.raio * 0.85);
+        });
+    }
+
     // ---------- Loop de física ----------
     update(time, delta) {
         if (this.fase !== 'simulando') return;
@@ -401,7 +406,13 @@ class QuitarScene extends Phaser.Scene {
         BolinhaPhysics.atualizar(this.todasBolinhas(), dt, this.CAMPO);
         CollisionManager.resolverTodas(this.todasBolinhas(), (a, b, forcaImpacto) => {
             if (JogoState.somAtivo !== false) SomFX.bater(Phaser.Math.Clamp(forcaImpacto / 500, 0.1, 1));
+            // tremidinha de câmera nos impactos fortes — dá peso à batida
+            if (forcaImpacto > 260) {
+                this.cameras.main.shake(90, Phaser.Math.Clamp(forcaImpacto / 30000, 0.002, 0.01));
+            }
         });
+
+        this.desenharRastros();
 
         let alguemSaiu = false;
         this.bolinhasAlvo.forEach(b => {
@@ -425,6 +436,20 @@ class QuitarScene extends Phaser.Scene {
     }
 
     finalizarSimulacao() {
+        if (this.rastroGfx) this.rastroGfx.clear();
+        // regra: se a bolinha de quem jogou parou DENTRO do triângulo, ele perde na hora
+        const atirador = this.jogadorDaVez === 'jogador' ? this.bolinhaJogador : this.bolinhaBot;
+        const v = this.verticesTriangulo;
+        const morreu = pontoDentroTriangulo({ x: atirador.x, y: atirador.y }, v.topo, v.baseDir, v.baseEsq);
+        if (morreu) {
+            if (JogoState.somAtivo !== false) SomFX.bater(1);
+            this.mostrarResultado(this.jogadorDaVez === 'jogador' ? 'bot' : 'jogador',
+                this.jogadorDaVez === 'jogador'
+                    ? '💀 Sua bolinha morreu no triângulo!'
+                    : '🎉 O bot morreu no triângulo!');
+            return;
+        }
+
         const restantes = this.bolinhasAlvo.filter(b => !b.removida).length;
         if (restantes === 0) {
             this.mostrarResultado();
@@ -463,15 +488,22 @@ class QuitarScene extends Phaser.Scene {
         this.painelResultado.add([fundo, caixa, this.textoResultadoTitulo, this.textoResultadoPlacar, botaoJogarDeNovo, botaoMenu]);
     }
 
-    mostrarResultado() {
+    mostrarResultado(vencedorForcado, tituloForcado) {
         this.fase = 'fimDeRound';
         this.mostrarUiMira(false);
         this.textoStatus.setText('FIM DA RODADA');
 
         let titulo;
-        if (this.pontosJogador > this.pontosBot) { titulo = '🏆 VOCÊ VENCEU!'; if (JogoState.somAtivo !== false) SomFX.vitoria(); }
-        else if (this.pontosBot > this.pontosJogador) titulo = '😅 O BOT VENCEU';
-        else titulo = '🤝 EMPATE';
+        if (tituloForcado) {
+            titulo = tituloForcado;
+            if (vencedorForcado === 'jogador' && JogoState.somAtivo !== false) SomFX.vitoria();
+        } else if (this.pontosJogador > this.pontosBot) {
+            titulo = '🏆 VOCÊ VENCEU!'; if (JogoState.somAtivo !== false) SomFX.vitoria();
+        } else if (this.pontosBot > this.pontosJogador) {
+            titulo = '😅 O BOT VENCEU';
+        } else {
+            titulo = '🤝 EMPATE';
+        }
 
         this.textoResultadoTitulo.setText(titulo);
         this.textoResultadoPlacar.setText('Você: ' + this.pontosJogador + '    Bot: ' + this.pontosBot);
