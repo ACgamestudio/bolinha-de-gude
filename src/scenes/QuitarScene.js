@@ -13,9 +13,14 @@ class QuitarScene extends Phaser.Scene {
         MusicaFundo.parar(this);
 
         this.CAMPO = { x1: 40, y1: 30, x2: 920, y2: 486 };
-        this.CENTRO_TRIANGULO = { x: 480, y: 250 };
-        this.LADO_TRIANGULO = 120;
-        this.RAIO_PROIBIDO_POSICIONAMENTO = 92;
+        this.LADO_TRIANGULO = 108;
+        // 3 triângulos espalhados pelo campo, cada um com suas próprias bolinhas-alvo
+        this.CENTROS_TRIANGULOS = [
+            { x: 250, y: 190 },
+            { x: 710, y: 190 },
+            { x: 480, y: 360 }
+        ];
+        this.RAIO_PROIBIDO_POSICIONAMENTO = 82;
         this.VELOCIDADE_MIN_TIRO = 160;
         this.VELOCIDADE_MAX_TIRO = 1050;
         this.PUXAO_MAXIMO = 200;        // px de arrasto = força máxima do estilingue
@@ -62,37 +67,42 @@ class QuitarScene extends Phaser.Scene {
         moldura.lineStyle(2, 0x3e2412, 0.7);
         moldura.strokeRect(campo.x1 - 3, campo.y1 - 3, larguraCampo + 6, alturaCampo + 6);
 
-        // triângulo riscado na terra
-        const v = verticesTriangulo(this.CENTRO_TRIANGULO.x, this.CENTRO_TRIANGULO.y, this.LADO_TRIANGULO);
-        this.verticesTriangulo = v;
+        // triângulos riscados na terra — um por centro
+        this.verticesTriangulos = this.CENTROS_TRIANGULOS.map(c =>
+            verticesTriangulo(c.x, c.y, this.LADO_TRIANGULO)
+        );
         const risco = this.add.graphics();
-        risco.lineStyle(3, 0xfff3d6, 0.85);
-        risco.beginPath();
-        risco.moveTo(v.topo.x, v.topo.y);
-        risco.lineTo(v.baseDir.x, v.baseDir.y);
-        risco.lineTo(v.baseEsq.x, v.baseEsq.y);
-        risco.closePath();
-        risco.strokePath();
+        this.verticesTriangulos.forEach(v => {
+            risco.lineStyle(3, 0xfff3d6, 0.85);
+            risco.beginPath();
+            risco.moveTo(v.topo.x, v.topo.y);
+            risco.lineTo(v.baseDir.x, v.baseDir.y);
+            risco.lineTo(v.baseEsq.x, v.baseEsq.y);
+            risco.closePath();
+            risco.strokePath();
+        });
     }
 
     // ---------- Bolinhas-alvo do triângulo ----------
     criarBolinhasDoTriangulo() {
-        const tipos = Phaser.Utils.Array.Shuffle(TIPOS_DE_BOLINHA.slice()).slice(0, 5);
-        const c = this.CENTRO_TRIANGULO;
-        // pequeno cluster de 5 posições ao redor do centro do triângulo, com jitter
+        // 3 bolinhas por triângulo, agrupadas em cluster ao redor do centro
         const offsets = [
-            { x: 0, y: 0 },
-            { x: -16, y: -12 }, { x: 16, y: -12 },
-            { x: -16, y: 14 }, { x: 16, y: 14 }
+            { x: 0, y: -12 },
+            { x: -15, y: 12 }, { x: 15, y: 12 }
         ];
 
-        this.bolinhasAlvo = tipos.map((tipo, i) => {
-            const off = offsets[i];
-            const jitterX = Phaser.Math.FloatBetween(-3, 3);
-            const jitterY = Phaser.Math.FloatBetween(-3, 3);
-            const b = new Bolinha(this, c.x + off.x + jitterX, c.y + off.y + jitterY, tipo, null);
-            b.ehAlvo = true;
-            return b;
+        this.bolinhasAlvo = [];
+        this.CENTROS_TRIANGULOS.forEach((c, idxTri) => {
+            const tipos = Phaser.Utils.Array.Shuffle(TIPOS_DE_BOLINHA.slice()).slice(0, offsets.length);
+            tipos.forEach((tipo, i) => {
+                const off = offsets[i];
+                const jitterX = Phaser.Math.FloatBetween(-3, 3);
+                const jitterY = Phaser.Math.FloatBetween(-3, 3);
+                const b = new Bolinha(this, c.x + off.x + jitterX, c.y + off.y + jitterY, tipo, null);
+                b.ehAlvo = true;
+                b.triangulo = idxTri; // a qual triângulo essa bolinha pertence
+                this.bolinhasAlvo.push(b);
+            });
         });
     }
 
@@ -141,10 +151,12 @@ class QuitarScene extends Phaser.Scene {
         this.placarJogadorTxt = painel(105, this.bolinhaJogador.tipo, 0x2ecc71);
         this.placarBotTxt = painel(855, this.bolinhaBot.tipo, 0xe74c3c);
 
-        this.textoRestantes = this.add.text(480, 470, '', {
+        this.textoRestantes = this.add.text(480, 44, '', {
             fontSize: '13px',
             fontFamily: 'Fredoka, Arial, sans-serif',
-            color: '#ffe8c8'
+            color: '#ffe8c8',
+            stroke: '#000000',
+            strokeThickness: 3
         }).setOrigin(0.5).setDepth(10);
     }
 
@@ -152,7 +164,7 @@ class QuitarScene extends Phaser.Scene {
         this.placarJogadorTxt.setText(String(this.pontosJogador));
         this.placarBotTxt.setText(String(this.pontosBot));
         const restantes = this.bolinhasAlvo.filter(b => !b.removida).length;
-        this.textoRestantes.setText(restantes + ' bolinha' + (restantes === 1 ? '' : 's') + ' no triângulo');
+        this.textoRestantes.setText(restantes + ' bolinha' + (restantes === 1 ? '' : 's') + ' nos triângulos');
     }
 
     // ---------- UI de posicionamento ----------
@@ -192,20 +204,24 @@ class QuitarScene extends Phaser.Scene {
     // sempre mantendo dentro dos limites do campo — usado tanto pro jogador (ao soltar o
     // arrasto) quanto pra posição escolhida pelo bot
     ajustarPosicaoValida(x, y, ignorar) {
-        const c = this.CENTRO_TRIANGULO;
         let px = Phaser.Math.Clamp(x, this.CAMPO.x1 + 18, this.CAMPO.x2 - 18);
         let py = Phaser.Math.Clamp(y, this.CAMPO.y1 + 18, this.CAMPO.y2 - 18);
 
-        for (let i = 0; i < 40; i++) {
-            const distCentro = Math.hypot(px - c.x, py - c.y);
-            if (distCentro < this.RAIO_PROIBIDO_POSICIONAMENTO) {
-                const ang = distCentro === 0 ? Math.random() * Math.PI * 2 : Math.atan2(py - c.y, px - c.x);
-                px = c.x + Math.cos(ang) * (this.RAIO_PROIBIDO_POSICIONAMENTO + 2);
-                py = c.y + Math.sin(ang) * (this.RAIO_PROIBIDO_POSICIONAMENTO + 2);
-                px = Phaser.Math.Clamp(px, this.CAMPO.x1 + 18, this.CAMPO.x2 - 18);
-                py = Phaser.Math.Clamp(py, this.CAMPO.y1 + 18, this.CAMPO.y2 - 18);
-                continue;
+        for (let i = 0; i < 60; i++) {
+            // empurra pra fora da zona proibida de QUALQUER triângulo
+            let empurradoTri = false;
+            for (const c of this.CENTROS_TRIANGULOS) {
+                const distCentro = Math.hypot(px - c.x, py - c.y);
+                if (distCentro < this.RAIO_PROIBIDO_POSICIONAMENTO) {
+                    const ang = distCentro === 0 ? Math.random() * Math.PI * 2 : Math.atan2(py - c.y, px - c.x);
+                    px = c.x + Math.cos(ang) * (this.RAIO_PROIBIDO_POSICIONAMENTO + 2);
+                    py = c.y + Math.sin(ang) * (this.RAIO_PROIBIDO_POSICIONAMENTO + 2);
+                    px = Phaser.Math.Clamp(px, this.CAMPO.x1 + 18, this.CAMPO.x2 - 18);
+                    py = Phaser.Math.Clamp(py, this.CAMPO.y1 + 18, this.CAMPO.y2 - 18);
+                    empurradoTri = true;
+                }
             }
+            if (empurradoTri) continue;
 
             let empurrado = false;
             for (const outra of this.todasBolinhas()) {
@@ -352,7 +368,7 @@ class QuitarScene extends Phaser.Scene {
         const alvosRestantes = this.bolinhasAlvo.filter(b => !b.removida);
         if (alvosRestantes.length === 0) return;
 
-        const jogada = BotQuitar.decidirJogada(this.CAMPO, this.CENTRO_TRIANGULO, alvosRestantes);
+        const jogada = BotQuitar.decidirJogada(this.CAMPO, this.CENTROS_TRIANGULOS, alvosRestantes);
         const pos = this.ajustarPosicaoValida(jogada.x, jogada.y, this.bolinhaBot);
         this.bolinhaBot.x = pos.x;
         this.bolinhaBot.y = pos.y;
@@ -417,7 +433,7 @@ class QuitarScene extends Phaser.Scene {
         let alguemSaiu = false;
         this.bolinhasAlvo.forEach(b => {
             if (b.removida) return;
-            const v = this.verticesTriangulo;
+            const v = this.verticesTriangulos[b.triangulo];
             const dentro = pontoDentroTriangulo({ x: b.x, y: b.y }, v.topo, v.baseDir, v.baseEsq);
             if (!dentro) {
                 b.removida = true;
@@ -439,8 +455,9 @@ class QuitarScene extends Phaser.Scene {
         if (this.rastroGfx) this.rastroGfx.clear();
         // regra: se a bolinha de quem jogou parou DENTRO do triângulo, ele perde na hora
         const atirador = this.jogadorDaVez === 'jogador' ? this.bolinhaJogador : this.bolinhaBot;
-        const v = this.verticesTriangulo;
-        const morreu = pontoDentroTriangulo({ x: atirador.x, y: atirador.y }, v.topo, v.baseDir, v.baseEsq);
+        const morreu = this.verticesTriangulos.some(v =>
+            pontoDentroTriangulo({ x: atirador.x, y: atirador.y }, v.topo, v.baseDir, v.baseEsq)
+        );
         if (morreu) {
             if (JogoState.somAtivo !== false) SomFX.bater(1);
             this.mostrarResultado(this.jogadorDaVez === 'jogador' ? 'bot' : 'jogador',

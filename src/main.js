@@ -1,6 +1,7 @@
 // ---------- Estado global (persiste entre cenas) ----------
 const JogoState = {
-    tipoEscolhido: TIPOS_DE_BOLINHA[0].nome
+    tipoEscolhido: TIPOS_DE_BOLINHA[0].nome,
+    dificuldade: 'medio' // 'facil' | 'medio' | 'dificil'
 };
 
 // ---------- Som sintetizado (sem arquivo de áudio nenhum, tudo Web Audio) ----------

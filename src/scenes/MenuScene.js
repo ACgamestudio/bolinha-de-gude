@@ -27,6 +27,8 @@ class MenuScene extends Phaser.Scene {
         this.criarZonaBotao(477, 456, 174, 38, () => this.abrirOpcoes());
         this.criarZonaBotao(477, 498, 174, 37, () => this.tentarSair());
 
+        this.criarSeletorDificuldade();
+
         this.textoToast = this.add.text(480, 360, '', {
             fontSize: '15px',
             fontFamily: 'Fredoka, Arial, sans-serif',
@@ -37,6 +39,64 @@ class MenuScene extends Phaser.Scene {
             backgroundColor: '#00000066',
             padding: { x: 10, y: 5 }
         }).setOrigin(0.5).setAlpha(0);
+    }
+
+    // faixa de dificuldade no topo da tela — 3 botõezinhos, o ativo fica destacado
+    criarSeletorDificuldade() {
+        this.add.text(160, 40, 'DIFICULDADE DA IA', {
+            fontSize: '15px',
+            fontFamily: 'Fredoka, Arial, sans-serif',
+            fontStyle: '700',
+            color: '#ffe066',
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5);
+
+        const opcoes = [
+            { chave: 'facil',   rotulo: 'Fácil' },
+            { chave: 'medio',   rotulo: 'Médio' },
+            { chave: 'dificil', rotulo: 'Difícil' }
+        ];
+
+        this.botoesDificuldade = [];
+        const larg = 92, alt = 34, gap = 6;
+        const inicioX = 160 - ((larg * 3 + gap * 2) / 2) + larg / 2;
+
+        opcoes.forEach((op, i) => {
+            const x = inicioX + i * (larg + gap);
+            const y = 74;
+            const g = this.add.graphics();
+            const rotulo = this.add.text(0, 0, op.rotulo, {
+                fontSize: '15px',
+                fontFamily: 'Fredoka, Arial, sans-serif',
+                fontStyle: '700',
+                color: '#ffffff'
+            }).setOrigin(0.5);
+
+            const cont = this.add.container(x, y, [g, rotulo]);
+            cont.setSize(larg, alt);
+            cont.setInteractive({ useHandCursor: true });
+            cont.on('pointerup', () => {
+                SomFX.ponto();
+                JogoState.dificuldade = op.chave;
+                this.pintarDificuldade();
+            });
+
+            this.botoesDificuldade.push({ chave: op.chave, g, larg, alt });
+        });
+
+        this.pintarDificuldade();
+    }
+
+    pintarDificuldade() {
+        this.botoesDificuldade.forEach(b => {
+            const ativo = JogoState.dificuldade === b.chave;
+            b.g.clear();
+            b.g.fillStyle(ativo ? 0x1f7a3d : 0x3e2412, 0.9);
+            b.g.fillRoundedRect(-b.larg / 2, -b.alt / 2, b.larg, b.alt, 8);
+            b.g.lineStyle(ativo ? 3 : 2, ativo ? 0xffe066 : 0x1c0f06, 1);
+            b.g.strokeRoundedRect(-b.larg / 2, -b.alt / 2, b.larg, b.alt, 8);
+        });
     }
 
     criarZonaBotao(x, y, largura, altura, aoClicar) {
