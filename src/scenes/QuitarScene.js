@@ -28,6 +28,9 @@ class QuitarScene extends Phaser.Scene {
         this.pontosJogador = 0;
         this.pontosBot = 0;
         this.jogadorDaVez = 'jogador';
+        // quando alguém para dentro do triângulo, fica 1 rodada sem jogar (castigo).
+        // esse contador marca quantas vezes cada lado ainda vai pular.
+        this.vezesPuladas = { jogador: 0, bot: 0 };
         this.fase = null;
         this.anguloAtual = 225; // mirando de baixo-esquerda pro centro por padrão
         this.forcaAtual = 55;
@@ -453,18 +456,20 @@ class QuitarScene extends Phaser.Scene {
 
     finalizarSimulacao() {
         if (this.rastroGfx) this.rastroGfx.clear();
-        // regra: se a bolinha de quem jogou parou DENTRO do triângulo, ele perde na hora
-        const atirador = this.jogadorDaVez === 'jogador' ? this.bolinhaJogador : this.bolinhaBot;
-        const morreu = this.verticesTriangulos.some(v =>
+
+        // regra: se a bolinha de quem jogou parou DENTRO de algum triângulo, ele NÃO morre —
+        // fica 1 rodada sem jogar (o adversário joga 2 vezes seguidas antes de voltar a alternar)
+        const quemJogou = this.jogadorDaVez;
+        const atirador = quemJogou === 'jogador' ? this.bolinhaJogador : this.bolinhaBot;
+        const parouNoTriangulo = this.verticesTriangulos.some(v =>
             pontoDentroTriangulo({ x: atirador.x, y: atirador.y }, v.topo, v.baseDir, v.baseEsq)
         );
-        if (morreu) {
+        if (parouNoTriangulo) {
             if (JogoState.somAtivo !== false) SomFX.bater(1);
-            this.mostrarResultado(this.jogadorDaVez === 'jogador' ? 'bot' : 'jogador',
-                this.jogadorDaVez === 'jogador'
-                    ? '💀 Sua bolinha morreu no triângulo!'
-                    : '🎉 O bot morreu no triângulo!');
-            return;
+            this.vezesPuladas[quemJogou] += 1; // vai perder a próxima vez
+            this.textoStatus.setText(quemJogou === 'jogador'
+                ? '😬 Parou no triângulo! Você perde a próxima vez'
+                : '😅 O bot parou no triângulo! Ele perde a próxima vez');
         }
 
         const restantes = this.bolinhasAlvo.filter(b => !b.removida).length;
@@ -472,7 +477,28 @@ class QuitarScene extends Phaser.Scene {
             this.mostrarResultado();
             return;
         }
-        this.jogadorDaVez = this.jogadorDaVez === 'jogador' ? 'bot' : 'jogador';
+
+        // pequena pausa pra ler o aviso de castigo, se houve
+        const proximo = () => this.passarVez();
+        if (parouNoTriangulo) {
+            this.time.delayedCall(1100, proximo);
+        } else {
+            proximo();
+        }
+    }
+
+    // decide de quem é a próxima vez respeitando os castigos.
+    // se o próximo da vez está de castigo, ele "gasta" um pulo e a vez volta pro outro.
+    passarVez() {
+        let proximo = this.jogadorDaVez === 'jogador' ? 'bot' : 'jogador';
+
+        // se o próximo tem pulo pendente, consome o pulo e mantém a vez com quem acabou de jogar
+        if (this.vezesPuladas[proximo] > 0) {
+            this.vezesPuladas[proximo] -= 1;
+            proximo = this.jogadorDaVez; // o mesmo lado joga de novo
+        }
+
+        this.jogadorDaVez = proximo;
         this.iniciarTurno();
     }
 
