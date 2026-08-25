@@ -476,6 +476,13 @@ class QuitarScene extends Phaser.Scene {
     }
 
     finalizarSimulacao() {
+        // trava contra chamada dupla: assim que a simulação para, sai da fase 'simulando'
+        // IMEDIATAMENTE. Sem isso, o update() do frame seguinte rodaria finalizarSimulacao
+        // de novo (porque iniciarTurno do bot demora a mudar a fase), fazendo a vez pular
+        // duas vezes por tiro — o que travava o jogo em "VEZ DO BOT".
+        if (this.fase !== 'simulando') return;
+        this.fase = 'resolvendo';
+
         if (this.rastroGfx) this.rastroGfx.clear();
 
         const restantes = this.bolinhasAlvo.filter(b => !b.removida).length;
