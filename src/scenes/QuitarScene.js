@@ -186,18 +186,9 @@ class QuitarScene extends Phaser.Scene {
 
         this.bolinhaJogador.sprite.setInteractive({ useHandCursor: true });
         this.input.setDraggable(this.bolinhaJogador.sprite);
-
-        this.bolinhaJogador.sprite.on('drag', (pointer, dragX, dragY) => {
-            if (this.fase !== 'posicionando') return;
-            this.bolinhaJogador.sprite.setPosition(dragX, dragY);
-        });
-        this.bolinhaJogador.sprite.on('dragend', () => {
-            if (this.fase !== 'posicionando') return;
-            const pos = this.ajustarPosicaoValida(this.bolinhaJogador.sprite.x, this.bolinhaJogador.sprite.y, this.bolinhaJogador);
-            this.bolinhaJogador.x = pos.x;
-            this.bolinhaJogador.y = pos.y;
-            this.bolinhaJogador.atualizarSprite();
-        });
+        // os handlers de drag (posicionar E mirar) ficam todos em criarUiMira,
+        // num único lugar, decidindo o comportamento pela fase atual — evita conflito
+        // entre dois conjuntos de listeners no mesmo sprite.
     }
 
     // empurra um ponto pra fora da zona proibida do triângulo e afasta de outras bolinhas,
@@ -252,39 +243,66 @@ class QuitarScene extends Phaser.Scene {
         this.puxaoDX = 0;
         this.puxaoDY = 0;
 
-        // handlers de arrasto no sprite da própria bolinha do jogador
+        // TODOS os handlers de arrasto da bolinha do jogador ficam aqui.
+        // O comportamento depende da fase: 'posicionando' move a bolinha; 'mirando' puxa
+        // o estilingue. Isso evita dois conjuntos de listeners brigando pelo mesmo sprite.
         const sp = this.bolinhaJogador.sprite;
+
         sp.on('dragstart', () => {
-            if (this.fase !== 'mirando' || this.jogadorDaVez !== 'jogador') return;
-            this.puxando = true;
-        });
-        sp.on('drag', (pointer, dragX, dragY) => {
-            if (!this.puxando) return;
-            // vetor do centro da bolinha até o dedo (o "puxão"); a bolinha NÃO se move
-            let dx = dragX - this.bolinhaJogador.x;
-            let dy = dragY - this.bolinhaJogador.y;
-            const dist = Math.hypot(dx, dy);
-            if (dist > this.PUXAO_MAXIMO) {
-                dx = dx / dist * this.PUXAO_MAXIMO;
-                dy = dy / dist * this.PUXAO_MAXIMO;
+            if (this.jogadorDaVez !== 'jogador') return;
+            if (this.fase === 'mirando') {
+                this.puxando = true;
             }
-            this.puxaoDX = dx;
-            this.puxaoDY = dy;
-            // mantém o sprite fixo no lugar da bolinha (só o guia se move)
-            sp.setPosition(this.bolinhaJogador.x, this.bolinhaJogador.y);
-            this.desenharGuiaEstilingue();
         });
+
+        sp.on('drag', (pointer, dragX, dragY) => {
+            if (this.jogadorDaVez !== 'jogador') return;
+
+            if (this.fase === 'posicionando') {
+                // move a bolinha livremente pra escolher onde sair
+                this.bolinhaJogador.x = dragX;
+                this.bolinhaJogador.y = dragY;
+                sp.setPosition(dragX, dragY);
+                return;
+            }
+
+            if (this.fase === 'mirando' && this.puxando) {
+                // vetor do centro da bolinha até o dedo (o "puxão"); a bolinha NÃO se move
+                let dx = dragX - this.bolinhaJogador.x;
+                let dy = dragY - this.bolinhaJogador.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist > this.PUXAO_MAXIMO) {
+                    dx = dx / dist * this.PUXAO_MAXIMO;
+                    dy = dy / dist * this.PUXAO_MAXIMO;
+                }
+                this.puxaoDX = dx;
+                this.puxaoDY = dy;
+                sp.setPosition(this.bolinhaJogador.x, this.bolinhaJogador.y);
+                this.desenharGuiaEstilingue();
+            }
+        });
+
         sp.on('dragend', () => {
-            if (!this.puxando) return;
-            this.puxando = false;
-            const dist = Math.hypot(this.puxaoDX, this.puxaoDY);
-            this.guiaEstilingue.clear();
-            if (dist < 12) { this.desenharGuiaEstilingue(); return; } // puxão fraco demais: ignora
-            // dispara na direção OPOSTA ao puxão (estilingue)
-            const forca = Phaser.Math.Clamp(dist / this.PUXAO_MAXIMO, 0, 1) * 100;
-            const angulo = Phaser.Math.RadToDeg(Math.atan2(-this.puxaoDY, -this.puxaoDX));
-            this.puxaoDX = this.puxaoDY = 0;
-            this.atirar('jogador', angulo, forca);
+            if (this.jogadorDaVez !== 'jogador') return;
+
+            if (this.fase === 'posicionando') {
+                const pos = this.ajustarPosicaoValida(this.bolinhaJogador.x, this.bolinhaJogador.y, this.bolinhaJogador);
+                this.bolinhaJogador.x = pos.x;
+                this.bolinhaJogador.y = pos.y;
+                this.bolinhaJogador.atualizarSprite();
+                return;
+            }
+
+            if (this.fase === 'mirando' && this.puxando) {
+                this.puxando = false;
+                const dist = Math.hypot(this.puxaoDX, this.puxaoDY);
+                this.guiaEstilingue.clear();
+                if (dist < 12) { this.desenharGuiaEstilingue(); return; } // puxão fraco demais: ignora
+                const forca = Phaser.Math.Clamp(dist / this.PUXAO_MAXIMO, 0, 1) * 100;
+                const angulo = Phaser.Math.RadToDeg(Math.atan2(-this.puxaoDY, -this.puxaoDX));
+                this.puxaoDX = this.puxaoDY = 0;
+                this.atirar('jogador', angulo, forca);
+            }
         });
     }
 
@@ -317,10 +335,10 @@ class QuitarScene extends Phaser.Scene {
         if (!this.bolinhaJogador) return;
         const sp = this.bolinhaJogador.sprite;
         const minhaVez = this.jogadorDaVez === 'jogador';
-        // sempre garante que o sprite está interativo; só liga o arrasto de tiro
-        // quando é a vez do jogador E a UI de mira está ativa
-        sp.setInteractive({ useHandCursor: minhaVez && mostrar });
-        this.input.setDraggable(sp, !!(minhaVez && mostrar));
+        // a bolinha já é interativa desde a criação; aqui só ligamos/desligamos o arrasto.
+        // arrasto ligado quando é a vez do jogador (pra posicionar ou mirar).
+        if (!sp.input) sp.setInteractive({ useHandCursor: true });
+        this.input.setDraggable(sp, !!minhaVez);
     }
 
 
@@ -331,12 +349,15 @@ class QuitarScene extends Phaser.Scene {
 
         if (this.jogadorDaVez === 'jogador') {
             this.textoBotJogando.setVisible(false);
+            // garante que o sprite está exatamente onde a bolinha parou (evita drag "torto")
+            this.bolinhaJogador.atualizarSprite();
             if (!this.jogadorJaPosicionou) {
                 // primeira jogada: escolhe onde colocar a bolinha
                 this.fase = 'posicionando';
                 this.dicaPosicionar.setVisible(true);
                 this.botaoConfirmarPosicao.setVisible(true);
                 this.bolinhaJogador.sprite.setInteractive({ useHandCursor: true });
+                this.input.setDraggable(this.bolinhaJogador.sprite, true);
                 this.jogadorJaPosicionou = true;
             } else {
                 // demais jogadas: já vai direto pro estilingue, de onde a bolinha parou
