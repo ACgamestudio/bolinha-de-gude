@@ -316,14 +316,11 @@ class QuitarScene extends Phaser.Scene {
         if (!mostrar) { this.puxando = false; this.guiaEstilingue.clear(); }
         if (!this.bolinhaJogador) return;
         const sp = this.bolinhaJogador.sprite;
-        if (mostrar && this.jogadorDaVez === 'jogador') {
-            // sua vez: pode arrastar pra atirar
-            sp.setInteractive({ useHandCursor: true });
-            this.input.setDraggable(sp, true);
-        } else {
-            // vez do bot (ou UI escondida): trava o arrasto da sua bolinha
-            this.input.setDraggable(sp, false);
-        }
+        const minhaVez = this.jogadorDaVez === 'jogador';
+        // sempre garante que o sprite está interativo; só liga o arrasto de tiro
+        // quando é a vez do jogador E a UI de mira está ativa
+        sp.setInteractive({ useHandCursor: minhaVez && mostrar });
+        this.input.setDraggable(sp, !!(minhaVez && mostrar));
     }
 
 
@@ -440,6 +437,9 @@ class QuitarScene extends Phaser.Scene {
             const dentro = pontoDentroTriangulo({ x: b.x, y: b.y }, v.topo, v.baseDir, v.baseEsq);
             if (!dentro) {
                 b.removida = true;
+                b.emJogo = false;   // sai da simulação: não colide nem conta pra "todasParadas"
+                b.vx = 0; b.vy = 0; // e para de vez (senão continuaria voando = turno travado)
+                b.sprite.setAlpha(0.35); // marca visualmente que foi capturada
                 alguemSaiu = true;
                 if (this.jogadorDaVez === 'jogador') this.pontosJogador++; else this.pontosBot++;
             }

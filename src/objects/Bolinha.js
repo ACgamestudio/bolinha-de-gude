@@ -5,7 +5,7 @@
 // outros, mas também acelera menos com a mesma força; atrito alto para mais rápido.
 const TIPOS_DE_BOLINHA = [
     { nome: 'Olho de Gato Azul', cor: 0xdff3ff, corPadrao: 0x2266cc, padrao: 'olho_de_gato', massa: 1.00, atrito: 1.00, pontoForte: 'Equilíbrio total' },
-    { nome: 'Furacão Verde',     cor: 0xe9fff0, corPadrao: 0x1f9d55, padrao: 'listrada',     massa: 0.85, atrito: 0.85, pontoForte: 'Desliza mais longe' },
+    { nome: 'Furacão Verde',     cor: 0x8ff0b0, corPadrao: 0x0e7a3a, padrao: 'listrada',     massa: 0.85, atrito: 0.85, pontoForte: 'Desliza mais longe' },
     { nome: 'Leiteira',          cor: 0xfaf6ec, corPadrao: 0xd8cdb0, padrao: 'leitosa',      massa: 1.15, atrito: 1.15, pontoForte: 'Resiste ao bater' },
     { nome: 'Ônix',              cor: 0x2b2b2b, corPadrao: 0x111111, padrao: 'lisa',         massa: 1.30, atrito: 1.10, pontoForte: 'Quase imparável' },
     { nome: 'Bolão de Fogo',     cor: 0xfff0e0, corPadrao: 0xd9451c, padrao: 'olho_de_gato', massa: 0.90, atrito: 0.80, pontoForte: 'Arranca rápido' },

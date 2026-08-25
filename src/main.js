@@ -1,6 +1,6 @@
 // ---------- Estado global (persiste entre cenas) ----------
 const JogoState = {
-    tipoEscolhido: TIPOS_DE_BOLINHA[0].nome,
+    tipoEscolhido: 'Furacão Verde', // bolinha verde já vem selecionada por padrão
     dificuldade: 'medio' // 'facil' | 'medio' | 'dificil'
 };
 
