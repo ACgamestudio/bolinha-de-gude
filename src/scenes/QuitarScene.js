@@ -32,6 +32,7 @@ class QuitarScene extends Phaser.Scene {
         this.anguloAtual = 225; // mirando de baixo-esquerda pro centro por padrão
         this.forcaAtual = 55;
         this.jogadorJaPosicionou = false;
+        this.botJaPosicionou = false;
 
         this.criarCenario();
         this.criarBolinhasDoTriangulo();
@@ -370,6 +371,7 @@ class QuitarScene extends Phaser.Scene {
         } else {
             this.dicaPosicionar.setVisible(false);
             this.botaoConfirmarPosicao.setVisible(false);
+            this.textoBotJogando.setText(this.botJaPosicionou ? '🤖 Bot mirando...' : '🤖 Bot escolhendo posição...');
             this.textoBotJogando.setVisible(true);
             this.time.delayedCall(700, () => this.jogadaDoBot());
         }
@@ -389,15 +391,22 @@ class QuitarScene extends Phaser.Scene {
         const alvosRestantes = this.bolinhasAlvo.filter(b => !b.removida);
         if (alvosRestantes.length === 0) return;
 
-        const jogada = BotQuitar.decidirJogada(this.CAMPO, this.CENTROS_TRIANGULOS, alvosRestantes);
-        const pos = this.ajustarPosicaoValida(jogada.x, jogada.y, this.bolinhaBot);
-        this.bolinhaBot.x = pos.x;
-        this.bolinhaBot.y = pos.y;
-        this.bolinhaBot.atualizarSprite();
+        // mesma regra do jogador: posiciona uma única vez, na primeira jogada.
+        // depois disso atira sempre de onde a própria bolinha parou.
+        if (!this.botJaPosicionou) {
+            const escolha = BotQuitar.escolherPosicaoInicial(this.CAMPO, this.CENTROS_TRIANGULOS, alvosRestantes);
+            const pos = this.ajustarPosicaoValida(escolha.x, escolha.y, this.bolinhaBot);
+            this.bolinhaBot.x = pos.x;
+            this.bolinhaBot.y = pos.y;
+            this.bolinhaBot.atualizarSprite();
+            this.botJaPosicionou = true;
+        }
+
+        const tiro = BotQuitar.decidirTiro({ x: this.bolinhaBot.x, y: this.bolinhaBot.y }, alvosRestantes);
         this.textoBotJogando.setText('🤖 Bot mirando...');
 
         this.time.delayedCall(600, () => {
-            this.atirar('bot', jogada.angulo, jogada.forca);
+            this.atirar('bot', tiro.angulo, tiro.forca);
         });
     }
 

@@ -17,11 +17,15 @@ const BotQuitar = {
         return this.NIVEIS[JogoState.dificuldade] || this.NIVEIS.medio;
     },
 
-    // decide a jogada completa: onde posicionar a própria bolinha, ângulo e força.
-    // centrosTriangulos é um array; o bot escolhe uma posição perto de alguma bolinha-alvo.
-    decidirJogada(limitesCampo, centrosTriangulos, bolinhasAlvo) {
+    // escolhe onde o bot entra em campo — usado SÓ na primeira jogada dele.
+    // nas jogadas seguintes ele atira de onde a bolinha parou, igual ao jogador.
+    escolherPosicaoInicial(limitesCampo, centrosTriangulos, bolinhasAlvo) {
+        return this.escolherPosicao(limitesCampo, centrosTriangulos, bolinhasAlvo, this.nivelAtual());
+    },
+
+    // ângulo e força a partir de uma posição já fixa
+    decidirTiro(posicao, bolinhasAlvo) {
         const nivel = this.nivelAtual();
-        const posicao = this.escolherPosicao(limitesCampo, centrosTriangulos, bolinhasAlvo, nivel);
         const alvo = this.escolherAlvo(posicao, bolinhasAlvo);
 
         const dx = alvo.x - posicao.x;
@@ -37,7 +41,7 @@ const BotQuitar = {
             20, 100
         );
 
-        return { x: posicao.x, y: posicao.y, angulo, forca };
+        return { angulo, forca };
     },
 
     // gera algumas posições num anel ao redor do triângulo e escolhe a melhor: a que fica
@@ -68,7 +72,7 @@ const BotQuitar = {
             }
         }
 
-        return melhorPos || { x: limites.x1 + 40, y: centro.y };
+        return melhorPos || { x: limites.x1 + 40, y: (limites.y1 + limites.y2) / 2 };
     },
 
     // prioriza a bolinha-alvo mais próxima da posição escolhida
